@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+
+  # ─────────────────────────────────────────
+  # ZOOKEEPER
+  # ─────────────────────────────────────────
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.1
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - order-network
+
+  # ─────────────────────────────────────────
+  # KAFKA
+  # ─────────────────────────────────────────
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"       # dùng từ host (IntelliJ, Kafka client)
+      - "29092:29092"     # dùng nội bộ giữa các container
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+    networks:
+      - order-network
+
+  # ─────────────────────────────────────────
+  # REDPANDA CONSOLE (Kafka UI)
+  # ─────────────────────────────────────────
+  redpanda-console:
+    image: redpandadata/console:v2.4.3
+    container_name: redpanda-console
+    depends_on:
+      - kafka
+    ports:
+      - "8090:8080"
+    environment:
+      CONFIG_FILEPATH: /etc/redpanda/config.yaml
+    volumes:
+      - ./redpanda-config.yaml:/etc/redpanda/config.yaml:ro
+    networks:
+      - order-network
+
+  # ─────────────────────────────────────────
+  # ORACLE XE 21c
+  # ─────────────────────────────────────────
+  oracle:
+    image: gvenzl/oracle-xe:21-slim
+    container_name: oracle-xe
+    ports:
+      - "1521:1521"
+      - "5500:5500"    # Oracle EM Express (optional)
+    environment:
+      ORACLE_PASSWORD: Admin123        # password cho user SYS và SYSTEM
+      APP_USER: orderuser              # tạo sẵn user cho app
+      APP_USER_PASSWORD: orderpass123
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+    networks:
+      - order-network
+    # Oracle XE khởi động chậm (~2-3 phút lần đầu)
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+networks:
+  order-network:
+    driver: bridge
+
+volumes:
+  oracle-data:
