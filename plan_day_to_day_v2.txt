@@ -1,0 +1,278 @@
+---
+
+# 🧭 LỘ TRÌNH LÀM PROJECT – ĐÚNG THỨ TỰ
+
+> Nguyên tắc:
+> **Chạy được sớm → Có luồng end-to-end → Mở rộng dần**
+
+---
+
+## 🥇 PHASE 0 – Chuẩn bị (KHÔNG VIẾT CODE NGAY)
+
+⏱ 2–3 ngày
+
+### Việc cần làm
+
+* Viết **scope** (chỉ làm những gì cần)
+* Chọn:
+  * Saga **Orchestrator** (Order Service)
+  * Database **per service**
+* Vẽ **1 sơ đồ duy nhất**:
+  * Services
+  * Kafka topics
+  * Flow order
+
+### ⚠️ Định nghĩa Compensating Transaction NGAY TỪ ĐÂY
+
+Đây là phần hay bị bỏ qua và gây fail về sau. Cần xác định rõ:
+
+| Bước Saga          | Event thành công      | Compensating khi thất bại                          |
+| ------------------ | --------------------- | -------------------------------------------------- |
+| Order Service      | order-created         | order-cancelled                                    |
+| Inventory Service  | inventory-reserved    | inventory-released (khi payment fail)              |
+| Payment Service    | payment-success       | payment-refunded (khi shipping fail)               |
+| Shipping Service   | shipping-created      | (điểm cuối – không rollback)                       |
+
+👉 Nếu bỏ qua phase này → 90% fail khi implement Saga rollback.
+
+---
+
+## 🥈 PHASE 1 – Core Infrastructure (BẮT BUỘC TRƯỚC)
+
+⏱ 3–5 ngày
+
+### 1️⃣ Tạo Project Skeleton
+
+* Mono-repo (dễ cho 1 người)
+* Spring Boot 3 + Java 17
+
+### 2️⃣ Docker Compose (BỔ SUNG MỚI – làm ngay)
+
+> ⚠️ Kafka + Zookeeper + Oracle chạy tay rất đau. Bắt buộc có docker-compose.yml từ Phase 1.
+
+docker-compose.yml bao gồm:
+* Zookeeper + Kafka
+* Oracle XE (hoặc PostgreSQL nếu không bắt buộc Oracle)
+* Kafka UI (Kowl / Redpanda Console) – giúp debug message dễ hơn nhiều
+
+### 3️⃣ Các service nền
+
+**LÀM TRƯỚC – chưa business**
+
+| Thứ tự | Service                    | Ghi chú                                  |
+| ------ | -------------------------- | ---------------------------------------- |
+| 1      | Config Server (optional)   | Có thể bỏ nếu scope nhỏ                  |
+| 2      | Service Registry (Eureka)  | ✅ Đã có – port 8761                      |
+| 3      | API Gateway                | ✅ Đã có – port 8080, có CorrelationIdFilter |
+| 4      | Kafka + Zookeeper          | Chạy qua Docker Compose                  |
+| 5      | Oracle DB / PostgreSQL     | Chạy qua Docker Compose                  |
+
+👉 Chỉ cần **chạy được**:
+* Gateway → Registry → 1 service dummy
+* Kafka send/consume test message
+* docker-compose up -d chạy toàn bộ infrastructure
+
+---
+
+## 🥉 PHASE 2 – ORDER SERVICE (LÀM TRƯỚC TẤT CẢ)
+
+⏱ 5–7 ngày
+
+> ❗ **Order Service = trái tim hệ thống**
+> Là Saga Orchestrator – giao tiếp với mọi service – quyết định trạng thái toàn hệ thống.
+
+### REST API
+
+* `POST /orders`
+* `GET /orders/{id}`
+
+### Database
+
+* Bảng ORDER: id, status, total_amount, created_at, updated_at
+* Bảng ORDER_ITEM: id, order_id, product_id, quantity, price
+* Bảng OUTBOX: id, aggregate_type, aggregate_id, event_type, payload, status, created_at  ← BỔ SUNG MỚI
+
+### ⭐ Transactional Outbox Pattern (BỔ SUNG MỚI)
+
+> ⚠️ Vấn đề: Lưu DB thành công nhưng publish Kafka thất bại → order mất.
+> Outbox pattern giải quyết điều này.
+
+Cách hoạt động:
+* Khi tạo order: lưu ORDER và OUTBOX trong **cùng 1 transaction**
+* Một scheduler/thread riêng đọc OUTBOX và publish lên Kafka
+* Sau khi publish thành công: update status = PUBLISHED
+
+💡 Interviewer rất ấn tượng với pattern này. Nên implement ngay từ Order Service.
+
+### Kafka
+
+* Publish: `order-created`
+* Listen: `inventory-reserved`, `inventory-failed`, `payment-success`, `payment-failed`, `shipping-created`
+
+### Order Status Flow
+
+```
+PENDING → INVENTORY_CHECKING → PAYMENT_PROCESSING → SHIPPING → COMPLETED
+PENDING → CANCELLED  (khi inventory hoặc payment fail)
+```
+
+👉 Test:
+**Tạo order → lưu DB → publish Kafka OK (kể cả khi Kafka tạm thời down)**
+
+---
+
+## 🏅 PHASE 3 – INVENTORY SERVICE
+
+⏱ 4–5 ngày
+
+### Làm gì?
+
+* Consumer `order-created`
+* Reserve stock
+* Oracle inventory
+* Publish:
+  * `inventory-reserved`
+  * `inventory-failed`
+
+### ⚠️ Idempotency – LÀM NGAY TẠI ĐÂY (BỔ SUNG MỚI)
+
+> Kafka có thể deliver cùng 1 message nhiều lần (at-least-once delivery).
+> Nếu không idempotent → reserve stock 2 lần cho cùng 1 order.
+
+Cách xử lý:
+* Lưu event_id đã xử lý vào bảng PROCESSED_EVENTS
+* Trước khi xử lý: check xem event_id đã tồn tại chưa
+* Nếu đã có → skip, không xử lý lại
+* Áp dụng pattern này cho **TẤT CẢ consumer** từ đây về sau
+
+### Kết quả mong muốn
+
+```
+Create Order → Inventory reserve → Order updated status
+```
+
+👉 Đến đây bạn đã có **mini Saga** chạy được.
+
+---
+
+## 🏆 PHASE 4 – PAYMENT SERVICE
+
+⏱ 4–6 ngày
+
+### Làm gì?
+
+* Consumer `inventory-reserved`
+* Fake payment (mock – không cần tích hợp thật)
+* Publish:
+  * `payment-success`
+  * `payment-failed`
+
+### Order Service lắng nghe:
+
+* `payment-success` → update status → PAYMENT_PROCESSING → SHIPPING
+* `payment-failed` → publish `inventory-release-command` → Inventory release stock → Order CANCELLED
+
+### Saga Rollback khi payment-failed
+
+```
+payment-failed
+  → Order Service publish inventory-release-command
+  → Inventory Service release stock
+  → Order status → CANCELLED
+```
+
+👉 Tới đây bạn đã có:
+
+```
+Order → Inventory → Payment  (kể cả rollback)
+```
+
+---
+
+## 🎖 PHASE 5 – SHIPPING SERVICE
+
+⏱ 3–4 ngày
+
+* Consumer `payment-success`
+* Tạo shipment record
+* Publish `shipping-created`
+* Order Service update status → SHIPPED
+
+---
+
+## 🏅 PHASE 6 – NOTIFICATION SERVICE
+
+⏱ 2–3 ngày
+
+* Consumer TẤT CẢ event (order-created, payment-success, shipping-created, ...)
+* Gửi mail/log
+* Không ảnh hưởng luồng chính – nếu fail thì order vẫn tiếp tục
+
+👉 Notification **luôn làm cuối**
+
+---
+
+## 🛡 PHASE 7 – HARDEN SYSTEM
+
+⏱ 5–7 ngày
+
+### Thêm:
+
+* Circuit breaker (Resilience4j)
+* Retry + DLQ (Dead Letter Queue)
+* ~~Idempotency~~ ← đã làm từ Phase 3
+* Security JWT (Spring Security tại API Gateway)
+* Logging tập trung (Correlation ID đã có sẵn từ CorrelationIdFilter)
+
+---
+
+# 🧱 THỨ TỰ CODE TRONG MỖI SERVICE
+
+(Áp dụng nhất quán cho mọi service)
+
+| Bước | Việc làm                  | Lý do                                    |
+| ---- | ------------------------- | ---------------------------------------- |
+| 1    | Entity + DB Schema        | Nền tảng – xác định data model trước     |
+| 2    | Repository                | Truy cập data                            |
+| 3    | Service Layer             | Business logic                           |
+| 4    | REST API                  | Expose interface ra ngoài                |
+| 5    | Kafka Producer/Consumer   | Async communication                      |
+| 6    | Exception Handling        | Không để lộ lỗi kỹ thuật ra ngoài        |
+| 7    | Unit Test / Integration   | Đảm bảo không break khi refactor         |
+
+---
+
+# 🧠 LƯU Ý QUAN TRỌNG
+
+❌ Đừng làm:
+
+* UI / Frontend
+* Search / Elasticsearch
+* Recommendation engine
+* Reporting / Analytics
+* Admin dashboard
+
+✅ Chỉ cần:
+
+* Order chạy end-to-end từ tạo → shipped
+* Saga rollback hoàn chỉnh khi inventory hoặc payment fail
+* Idempotency ở tất cả Kafka consumer
+* Outbox pattern ở Order Service
+
+---
+
+# ⏳ Timeline thực tế (1 người)
+
+| Thời gian   | Kết quả đạt được                        | Ghi chú                          |
+| ----------- | --------------------------------------- | -------------------------------- |
+| Tuần 1–2    | Phase 0 + Phase 1 hoàn chỉnh           | Infrastructure + Docker Compose  |
+| Tuần 3–5    | Order → Inventory (mini Saga)           | Có rollback inventory-failed     |
+| Tuần 5–8    | + Payment (Saga đầy đủ)                | Có rollback payment-failed       |
+| Tuần 8–10   | + Shipping + Notification               | Full happy path                  |
+| Tháng 3     | Harden: JWT, Circuit Breaker, DLQ       | Production-ready                 |
+| Tháng 4+    | Enterprise features                     | Outbox scheduler, monitoring...  |
+
+> ⚠️ Timeline gốc "2 tuần Order → Inventory → Payment" khá tight.
+> Thực tế nên tính **5 tuần** cho phần đó khi debug Kafka + Saga.
+
+---
