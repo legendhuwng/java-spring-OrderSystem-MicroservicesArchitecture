@@ -42,7 +42,10 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             log.warn("Missing or invalid Authorization header for path: {}", path);
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-            return exchange.getResponse().setComplete();
+            exchange.getResponse().getHeaders().add("Content-Type", "application/json");
+            var buffer = exchange.getResponse().bufferFactory()
+                    .wrap("{\"status\":\"error\",\"message\":\"Missing or invalid token\"}".getBytes());
+            return exchange.getResponse().writeWith(Mono.just(buffer));
         }
 
         String token = authHeader.substring(7);
@@ -50,7 +53,10 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
         if (!jwtUtil.validateToken(token)) {
             log.warn("Invalid JWT token for path: {}", path);
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
-            return exchange.getResponse().setComplete();
+            exchange.getResponse().getHeaders().add("Content-Type", "application/json");
+            var buffer = exchange.getResponse().bufferFactory()
+                    .wrap("{\"status\":\"error\",\"message\":\"Invalid or expired token\"}".getBytes());
+            return exchange.getResponse().writeWith(Mono.just(buffer));
         }
 
         // Inject username vào header để các service downstream biết
