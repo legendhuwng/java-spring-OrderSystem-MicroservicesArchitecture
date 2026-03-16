@@ -14,7 +14,92 @@ spring:
               enabled: true
               lower-case-service-id: true
 
+          # ── Định nghĩa route thủ công với Circuit Breaker ──────────
+          routes:
+            - id: order-service
+              uri: lb://order-service
+              predicates:
+                - Path=/order-service/**
+              filters:
+                - StripPrefix=1
+                - name: CircuitBreaker
+                  args:
+                    name: order-service-cb
+                    fallbackUri: forward:/fallback/order-service
+
+            - id: inventory-service
+              uri: lb://inventory-service
+              predicates:
+                - Path=/inventory-service/**
+              filters:
+                - StripPrefix=1
+                - name: CircuitBreaker
+                  args:
+                    name: inventory-service-cb
+                    fallbackUri: forward:/fallback/inventory-service
+
+            - id: payment-service
+              uri: lb://payment-service
+              predicates:
+                - Path=/payment-service/**
+              filters:
+                - StripPrefix=1
+                - name: CircuitBreaker
+                  args:
+                    name: payment-service-cb
+                    fallbackUri: forward:/fallback/payment-service
+
+            - id: shipping-service
+              uri: lb://shipping-service
+              predicates:
+                - Path=/shipping-service/**
+              filters:
+                - StripPrefix=1
+                - name: CircuitBreaker
+                  args:
+                    name: shipping-service-cb
+                    fallbackUri: forward:/fallback/shipping-service
+
 eureka:
   client:
     service-url:
       defaultZone: http://localhost:8761/eureka
+
+# ── Resilience4j config ────────────────────────────────────────────
+resilience4j:
+  circuitbreaker:
+    instances:
+      order-service-cb:
+        sliding-window-size: 10           # số request để tính tỉ lệ lỗi
+        failure-rate-threshold: 50        # 50% lỗi → mở circuit
+        wait-duration-in-open-state: 10s  # chờ 10s rồi thử lại (HALF-OPEN)
+        permitted-number-of-calls-in-half-open-state: 3
+        register-health-indicator: true
+      inventory-service-cb:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        register-health-indicator: true
+      payment-service-cb:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        register-health-indicator: true
+      shipping-service-cb:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        register-health-indicator: true
+
+# ── Actuator: xem trạng thái circuit breaker ──────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, circuitbreakers
+  health:
+    circuitbreakers:
+      enabled: true
