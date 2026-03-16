@@ -26,7 +26,7 @@ public class InventoryEventConsumer {
     )
     public void onOrderCreated(
             @Payload String payload,
-            @Header(KafkaHeaders.RECEIVED_KEY) String orderId) {
+            @Header(KafkaHeaders.RECEIVED_KEY) String orderId) throws Exception{
         log.info("Received order-created event: orderId={}", orderId);
         // BỎ try-catch — để exception bubble up → DLQ handler bắt
         OrderCreatedEvent event = objectMapper.readValue(payload, OrderCreatedEvent.class);
