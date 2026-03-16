@@ -35,4 +35,16 @@ public class InventoryEventConsumer {
             log.error("Failed to process order-created event: orderId={}", orderId, e);
         }
     }
+
+@KafkaListener(
+    topics = "inventory-release-command",
+    groupId = "${spring.kafka.consumer.group-id}"
+)
+public void onInventoryReleaseCommand(
+        @Payload String payload,
+        @Header(KafkaHeaders.RECEIVED_KEY) String orderId) {
+    log.info("Received inventory-release-command: orderId={}", orderId);
+    inventoryService.releaseInventory(orderId, payload);
+}
+
 }

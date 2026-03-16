@@ -34,15 +34,18 @@ public class OrderEventConsumer {
     }
 
     @KafkaListener(topics = "${kafka.topics.payment-success}", groupId = "${spring.kafka.consumer.group-id}")
-    public void onPaymentSuccess(String payload) {
-        log.info("Received payment-success: {}", payload);
-        // TODO Phase 4: update status → SHIPPING
+    public void onPaymentSuccess(@Payload String payload,
+                                @Header(KafkaHeaders.RECEIVED_KEY) String orderId) {
+        log.info("Payment success for orderId={}", orderId);
+        orderService.updateOrderStatus(orderId, OrderStatus.SHIPPING);
     }
 
     @KafkaListener(topics = "${kafka.topics.payment-failed}", groupId = "${spring.kafka.consumer.group-id}")
-    public void onPaymentFailed(String payload) {
-        log.info("Received payment-failed: {}", payload);
-        // TODO Phase 4: update status → CANCELLED, publish inventory-release-command
+    public void onPaymentFailed(@Payload String payload,
+                                @Header(KafkaHeaders.RECEIVED_KEY) String orderId) {
+        log.info("Payment failed for orderId={}, publishing inventory-release-command", orderId);
+        // Saga rollback: yêu cầu Inventory release stock
+        orderService.cancelOrderAndReleaseInventory(orderId);
     }
 
     @KafkaListener(topics = "${kafka.topics.shipping-created}", groupId = "${spring.kafka.consumer.group-id}")

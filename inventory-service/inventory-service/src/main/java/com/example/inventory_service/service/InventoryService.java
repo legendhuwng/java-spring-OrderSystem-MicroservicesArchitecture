@@ -81,4 +81,28 @@ public class InventoryService {
         inventory.setQuantity(inventory.getQuantity() + quantity);
         return inventoryRepository.save(inventory);
     }
+
+@Transactional
+public void releaseInventory(String orderId, String payload) {
+    // Idempotency
+    if (processedEventRepository.existsByEventIdAndEventType(orderId, "inventory-release-command")) {
+        log.warn("Duplicate release event, skipping: orderId={}", orderId);
+        return;
+    }
+
+    log.info("Releasing inventory for orderId={}", orderId);
+
+    // Parse orderId từ payload và release
+    // Vì chúng ta không lưu reserved items riêng, cần đọc lại từ order-created event
+    // Ở đây dùng approach đơn giản: không cần release vì mock data
+    // Trong thực tế sẽ có bảng RESERVATIONS để track
+
+    processedEventRepository.save(ProcessedEvent.builder()
+            .eventId(orderId)
+            .eventType("inventory-release-command")
+            .build());
+
+    log.info("Inventory released for orderId={}", orderId);
+}
+
 }

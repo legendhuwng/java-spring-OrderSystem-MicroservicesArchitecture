@@ -98,4 +98,27 @@ public class OrderService {
                 .items(itemResponses)
                 .build();
     }
+
+    @Transactional
+public void cancelOrderAndReleaseInventory(String orderId) {
+    // 1. Update order status → CANCELLED
+    updateOrderStatus(orderId, OrderStatus.CANCELLED);
+
+    // 2. Publish inventory-release-command để Inventory Service rollback stock
+    try {
+        String payload = "{\"orderId\":\"" + orderId + "\",\"action\":\"RELEASE\"}";
+        OutboxEvent outbox = OutboxEvent.builder()
+                .aggregateType("ORDER")
+                .aggregateId(orderId)
+                .eventType("inventory-release-command")
+                .payload(payload)
+                .build();
+        outboxEventRepository.save(outbox);
+        log.info("Queued inventory-release-command for orderId={}", orderId);
+    } catch (Exception e) {
+        log.error("Failed to queue inventory-release-command for orderId={}", orderId, e);
+        throw new RuntimeException("Failed to queue rollback command", e);
+    }
+}
+
 }
