@@ -49,8 +49,9 @@ public class OrderEventConsumer {
     }
 
     @KafkaListener(topics = "${kafka.topics.shipping-created}", groupId = "${spring.kafka.consumer.group-id}")
-    public void onShippingCreated(String payload) {
-        log.info("Received shipping-created: {}", payload);
-        // TODO Phase 5: update status → COMPLETED
+    public void onShippingCreated(@Payload String payload,
+                                @Header(KafkaHeaders.RECEIVED_KEY) String orderId) {
+        log.info("Shipping created for orderId={}", orderId);
+        orderService.updateOrderStatus(orderId, OrderStatus.COMPLETED);
     }
 }
