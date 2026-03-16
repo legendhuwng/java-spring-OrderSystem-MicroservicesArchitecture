@@ -1,0 +1,28 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: notification-service
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: notification-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka
+
+kafka:
+  topics:
+    order-created: order-created
+    inventory-reserved: inventory-reserved
+    inventory-failed: inventory-failed
+    payment-success: payment-success
+    payment-failed: payment-failed
+    shipping-created: shipping-created
