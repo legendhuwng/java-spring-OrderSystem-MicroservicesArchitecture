@@ -28,12 +28,9 @@ public class InventoryEventConsumer {
             @Payload String payload,
             @Header(KafkaHeaders.RECEIVED_KEY) String orderId) {
         log.info("Received order-created event: orderId={}", orderId);
-        try {
-            OrderCreatedEvent event = objectMapper.readValue(payload, OrderCreatedEvent.class);
-            inventoryService.reserveInventory(orderId, event);
-        } catch (Exception e) {
-            log.error("Failed to process order-created event: orderId={}", orderId, e);
-        }
+        // BỎ try-catch — để exception bubble up → DLQ handler bắt
+        OrderCreatedEvent event = objectMapper.readValue(payload, OrderCreatedEvent.class);
+        inventoryService.reserveInventory(orderId, event);
     }
 
 @KafkaListener(
