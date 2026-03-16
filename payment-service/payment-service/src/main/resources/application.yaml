@@ -45,3 +45,7 @@ kafka:
 # Tỉ lệ thất bại giả lập (0.0 = luôn thành công, 1.0 = luôn thất bại)
 payment:
   failure-rate: 0.3
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] [correlationId=%X{correlationId}] %-5level %logger{36} - %msg%n"

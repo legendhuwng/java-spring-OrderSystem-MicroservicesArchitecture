@@ -42,3 +42,7 @@ kafka:
     inventory-reserved: inventory-reserved
     inventory-failed: inventory-failed
     inventory-release-command: inventory-release-command  # thêm dòng này
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] [correlationId=%X{correlationId}] %-5level %logger{36} - %msg%n"
