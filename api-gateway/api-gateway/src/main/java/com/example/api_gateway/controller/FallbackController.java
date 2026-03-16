@@ -2,8 +2,6 @@ package com.example.api_gateway.controller;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -13,8 +11,7 @@ import java.util.Map;
 @RequestMapping("/fallback")
 public class FallbackController {
 
-    @GetMapping("/order-service")
-    @PostMapping("/order-service")
+    @RequestMapping("/order-service")
     public ResponseEntity<Map<String, String>> orderServiceFallback() {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(Map.of(
@@ -24,8 +21,7 @@ public class FallbackController {
                 ));
     }
 
-    @GetMapping("/inventory-service")
-    @PostMapping("/inventory-service")
+    @RequestMapping("/inventory-service")
     public ResponseEntity<Map<String, String>> inventoryServiceFallback() {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(Map.of(
@@ -35,8 +31,7 @@ public class FallbackController {
                 ));
     }
 
-    @GetMapping("/payment-service")
-    @PostMapping("/payment-service")
+    @RequestMapping("/payment-service")
     public ResponseEntity<Map<String, String>> paymentServiceFallback() {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(Map.of(
@@ -46,8 +41,7 @@ public class FallbackController {
                 ));
     }
 
-    @GetMapping("/shipping-service")
-    @PostMapping("/shipping-service")
+    @RequestMapping("/shipping-service")
     public ResponseEntity<Map<String, String>> shippingServiceFallback() {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(Map.of(
