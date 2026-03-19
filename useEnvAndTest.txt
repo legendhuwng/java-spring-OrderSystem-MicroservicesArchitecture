@@ -1,0 +1,33 @@
+docker compose up --build
+
+
+
+
+cp .env.example .env
+# điền giá trị vào .env
+docker compose up
+
+
+
+
+chmod +x test-orders.sh
+./test-orders.sh
+
+
+
+//database
+https://localhost:5500/em
+
+
+
+# Seed thêm 1000 units
+curl -s -X POST "http://localhost:8082/inventory/PROD-001/stock?quantity=1000"
+
+
+dbeaver-ce &
+
+Host: localhost
+Port: 1521
+Database: XEPDB1
+Username: orderuser
+Password: orderpass123

@@ -1,0 +1,21 @@
+# Secrets - KHÔNG commit lên Git
+.env
+
+# Maven
+target/
+*.jar
+*.war
+*.class
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
