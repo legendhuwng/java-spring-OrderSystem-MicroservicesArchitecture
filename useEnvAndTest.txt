@@ -31,3 +31,6 @@ Port: 1521
 Database: XEPDB1
 Username: orderuser
 Password: orderpass123
+
+
+docker exec -it oracle-xe sqlplus orderuser/orderpass123@localhost/XEPDB1

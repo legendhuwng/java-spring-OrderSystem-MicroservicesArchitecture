@@ -19,6 +19,7 @@ public class InventoryService {
 
     private final InventoryRepository inventoryRepository;
     private final ProcessedEventRepository processedEventRepository;
+    private final InventoryReservationRepository reservationRepository; // NEW
     private final KafkaTemplate<String, String> kafkaTemplate;
 
     private static final String EVENT_TYPE = "order-created";
@@ -50,7 +51,16 @@ public class InventoryService {
 
                 inventory.setQuantity(inventory.getQuantity() - item.getQuantity());
                 inventoryRepository.save(inventory);
-                log.info("Reserved {} units of {}", item.getQuantity(), item.getProductId());
+
+                // NEW: lưu lại đã reserve bao nhiêu để có thể rollback sau
+                reservationRepository.save(InventoryReservation.builder()
+                        .orderId(orderId)
+                        .productId(item.getProductId())
+                        .quantity(item.getQuantity())
+                        .build());
+
+                log.info("Reserved {} units of {} for orderId={}",
+                        item.getQuantity(), item.getProductId(), orderId);
             }
 
             // ── Publish inventory-reserved ─────────────────────────
@@ -82,27 +92,45 @@ public class InventoryService {
         return inventoryRepository.save(inventory);
     }
 
-@Transactional
-public void releaseInventory(String orderId, String payload) {
+    @Transactional
+    public void releaseInventory(String orderId, String payload) {
     // Idempotency
-    if (processedEventRepository.existsByEventIdAndEventType(orderId, "inventory-release-command")) {
-        log.warn("Duplicate release event, skipping: orderId={}", orderId);
-        return;
+        if (processedEventRepository.existsByEventIdAndEventType(orderId, "inventory-release-command")) {
+            log.warn("Duplicate release event, skipping: orderId={}", orderId);
+            return;
+        }
+
+        log.info("Releasing inventory for orderId={}", orderId);
+
+        // NEW: query đúng số lượng đã reserve, cộng lại vào stock
+        List<InventoryReservation> reservations =
+                reservationRepository.findByOrderIdAndStatus(orderId, ReservationStatus.RESERVED);
+
+        if (reservations.isEmpty()) {
+            log.warn("No reservations found for orderId={}, nothing to release", orderId);
+        }
+
+        for (InventoryReservation reservation : reservations) {
+            Inventory inventory = inventoryRepository.findByProductId(reservation.getProductId())
+                    .orElseThrow(() -> new RuntimeException(
+                            "Product not found: " + reservation.getProductId()));
+
+            inventory.setQuantity(inventory.getQuantity() + reservation.getQuantity());
+            inventoryRepository.save(inventory);
+
+            reservation.setStatus(ReservationStatus.RELEASED);
+            reservationRepository.save(reservation);
+
+            log.info("Released {} units of {} for orderId={}",
+                    reservation.getQuantity(), reservation.getProductId(), orderId);
+        }
+
+        processedEventRepository.save(ProcessedEvent.builder()
+                .eventId(orderId)
+                .eventType("inventory-release-command")
+                .build());
+
+        log.info("Inventory release completed for orderId={}", orderId);
     }
-
-    log.info("Releasing inventory for orderId={}", orderId);
-
-    // Parse orderId từ payload và release
-    // Vì chúng ta không lưu reserved items riêng, cần đọc lại từ order-created event
-    // Ở đây dùng approach đơn giản: không cần release vì mock data
-    // Trong thực tế sẽ có bảng RESERVATIONS để track
-
-    processedEventRepository.save(ProcessedEvent.builder()
-            .eventId(orderId)
-            .eventType("inventory-release-command")
-            .build());
-
-    log.info("Inventory released for orderId={}", orderId);
-}
 
 }
