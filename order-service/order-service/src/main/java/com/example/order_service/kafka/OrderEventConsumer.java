@@ -1,16 +1,17 @@
 // OrderEventConsumer.java
 package com.example.order_service.kafka;
 
-import com.example.order_service.entity.OrderStatus;
-import com.example.order_service.service.OrderService;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.stereotype.Component;
-
 import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.stereotype.Component;
+
+import com.example.order_service.entity.OrderStatus;
+import com.example.order_service.service.OrderService;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Component
 @RequiredArgsConstructor
@@ -18,6 +19,17 @@ import org.springframework.messaging.handler.annotation.Payload;
 public class OrderEventConsumer {
 
     private final OrderService orderService;
+
+    @KafkaListener(
+    topics = "${kafka.topics.order-created}",
+    groupId = "${spring.kafka.consumer.group-id}"
+    )
+    public void onOrderCreated(
+            @Payload String payload,
+            @Header(KafkaHeaders.RECEIVED_KEY) String orderId) {
+        log.info("Order published to Kafka, status → INVENTORY_CHECKING: orderId={}", orderId);
+        orderService.updateOrderStatus(orderId, OrderStatus.INVENTORY_CHECKING);
+    }
 
     @KafkaListener(topics = "${kafka.topics.inventory-reserved}", groupId = "${spring.kafka.consumer.group-id}")
     public void onInventoryReserved(@Payload String payload,
